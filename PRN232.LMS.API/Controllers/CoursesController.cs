@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using PRN232.LMS.Services.Interfaces;
 using PRN232.LMS.Services.Models;
 using PRN232.LMS.Services.Models.Courses;
+using PRN232.LMS.Services.Models.Enrollments;
 
 namespace PRN232.LMS.API.Controllers;
 
@@ -52,5 +53,22 @@ public class CoursesController : ControllerBase
         var deleted = await _service.DeleteAsync(id);
         if (!deleted) return NotFound(ApiResponse<object>.Fail($"Course {id} not found"));
         return Ok(ApiResponse<object>.Ok(null!, "Course deleted successfully"));
+    }
+
+    /// <summary>
+    /// Get enrollments of a course.
+    /// Use ?expand=student to include full student details.
+    /// </summary>
+    [HttpGet("{id:int}/enrollments")]
+    public async Task<ActionResult<ApiResponse<PagedResult<EnrollmentResponse>>>> GetEnrollments(
+        int id,
+        [FromQuery] string? expand = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        var result = await _service.GetEnrollmentsAsync(id, expand, page, pageSize);
+        if (result == null)
+            return NotFound(ApiResponse<PagedResult<EnrollmentResponse>>.Fail($"Course {id} not found"));
+        return Ok(ApiResponse<PagedResult<EnrollmentResponse>>.Ok(result));
     }
 }

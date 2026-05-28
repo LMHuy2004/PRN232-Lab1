@@ -5,6 +5,7 @@ using PRN232.LMS.Repositories.Interfaces;
 using PRN232.LMS.Services.Interfaces;
 using PRN232.LMS.Services.Models;
 using PRN232.LMS.Services.Models.Courses;
+using PRN232.LMS.Services.Models.Enrollments;
 
 namespace PRN232.LMS.Services.Implementations;
 
@@ -87,6 +88,55 @@ public class CourseService : ICourseService
         await _repo.DeleteAsync(entity);
         return true;
     }
+
+    public async Task<PagedResult<EnrollmentResponse>?> GetEnrollmentsAsync(int courseId, string? expand, int page, int pageSize)
+    {
+        // Return null if course doesn't exist
+        var courseExists = await _context.Courses.AnyAsync(c => c.Id == courseId);
+        if (!courseExists) return null;
+
+        var expandStudent = expand?.ToLower().Contains("student") == true;
+
+        var query = _context.Enrollments
+            .Where(e => e.CourseId == courseId)
+            .Include(e => e.Course).ThenInclude(c => c.Subject)
+            .Include(e => e.Course).ThenInclude(c => c.Semester)
+            .AsQueryable();
+
+        if (expandStudent)
+            query = query.Include(e => e.Student);
+
+        var total = await query.CountAsync();
+        var items = await query
+            .OrderByDescending(e => e.EnrolledDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var responses = items.Select(e => new EnrollmentResponse
+        {
+            Id          = e.Id,
+            EnrolledDate = e.EnrolledDate,
+            Status      = e.Status.ToString(),
+            Grade       = e.Grade,
+            CourseId    = e.CourseId,
+            CourseCode  = e.Course?.Code ?? "",
+            CourseName  = e.Course?.Name ?? "",
+            SubjectCode = e.Course?.Subject?.Code,
+            SemesterName = e.Course?.Semester?.Name,
+            // Student info: only populated when ?expand=student
+            StudentId   = e.StudentId,
+            StudentCode = expandStudent ? (e.Student?.StudentCode ?? "") : "",
+            StudentName = expandStudent ? (e.Student?.FullName    ?? "") : "",
+        }).ToList();
+
+        return new PagedResult<EnrollmentResponse>
+        {
+            Items      = responses,
+            Pagination = PaginationMeta.Create(page, pageSize, total)
+        };
+    }
+
 
     private static CourseModel ToBusinessModel(Course x, bool includeEnrollments) => new()
     {
